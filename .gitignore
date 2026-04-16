@@ -1,0 +1,15 @@
+# Entornos virtuales
+.venv/
+venv/
+env/
+
+# Variables de entorno y cachés de Python
+.env
+__pycache__/
+*.pyc
+
+# Datos, inputs y outputs
+data/
+*.xlsx
+*.csv
+matches.csv
