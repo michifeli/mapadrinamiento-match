@@ -9,7 +9,6 @@ __pycache__/
 *.pyc
 
 # Datos, inputs y outputs
-data/
 *.xlsx
 *.csv
 matches.csv
