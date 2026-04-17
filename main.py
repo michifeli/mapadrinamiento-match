@@ -1,126 +1,59 @@
-import pandas as pd
-import numpy as np
-from scipy.optimize import linear_sum_assignment
-from dotenv import load_dotenv
-import os
-import glob
+from src.catalogs import OFFICIAL_OPTIONS
+from src.config import load_app_config
+from src.data_pipeline import preprocess_data, read_data
+from src.matching import match_algorithm
+from src.scoring import calculate_match_components
+from src.semantic_mapper import create_mapper_state, reset_mapper_state
+from src.text_normalization import normalize_token
 
-load_dotenv()
-API_KEY = os.getenv("API_KEY")
 
-def read_data(file_path):
-    archivos = glob.glob(file_path)
-    if not archivos:
-        raise FileNotFoundError("No se encontró ningún archivo en la ruta especificada.")    
-    return pd.read_excel(archivos[0])
+_MAPPER_STATE: dict | None = None
 
-def preprocess_data(df):
-    unified_data = []
-    role_col = "Indícanos si eres mechón / mechona o de generación anterior 🤔 (Si te cambiaste a TEL este año, también cuentas como mechón/a 😊)"
-    
-    for idx, row in df.iterrows():
-        role = row[role_col]
-        
-        if pd.isna(role): 
-            continue
-        
-        if 'Mechón' in role:
-            role_type = 'Mechón'
-            name = row['Dinos tu nombre y apellido\xa0']
-            email = row['Indícanos tu correo USM\xa0']
-            deportes = str(row['¿Qué deportes te gusta practicar?'])
-            juegos = str(row['¿Juegas alguno de estos juegos?'])
-            series = str(row['Eres fan de las series de...'])
-            pref = str(row['Me gusta mas...'])
-            comida = str(row['¿Cuál de estas comidas te parece mas deliciosa? (Elige tu top 3)'])
-            musica = str(row['Tipo de música favorita (Elige tu top 3)'])
-            dieta = str(row['Tipo de dieta'])
-            trago = str(row['Tienes algún trago favorito? (Elige tu top 3)'])
-            hobby = str(row['¿Tienes algún Hobby?'])
-            idiomas = str(row['¿Cuál de estos idiomas sabes o te gustaría aprender?\xa0'])
-        else:
-            role_type = 'Padrino'
-            name = row['Dinos tu nombre y apellido']
-            email = row['Indícanos tu correo USM']
-            deportes = str(row['¿Qué deportes te gusta practicar?2'])
-            juegos = str(row['¿Juegas alguno de estos juegos?2'])
-            series = str(row['Eres fan de las series/películas de...'])
-            pref = str(row['Me gusta mas...2'])
-            comida = str(row['¿Cuál de estas comidas te parece mas deliciosa? (Elige tu top 3)2'])
-            musica = str(row['Tipo de música favorita (Elige hasta tu top 3)'])
-            dieta = str(row['Tipo de dieta2'])
-            trago = str(row['Tienes algún trago favorito? (Elige tu top 3)2'])
-            hobby = str(row['¿Tienes algún Hobby?2'])
-            idiomas = str(row['¿Cuál de estos idiomas sabes o te gustaría aprender?\xa02'])
-        
-        unified_data.append({
-            'Role': role_type, 'Name': name, 'Email': email,
-            'Deportes': deportes, 'Juegos': juegos, 'Series': series,
-            'Pref': pref, 'Comida': comida, 'Musica': musica,
-            'Dieta': dieta, 'Trago': trago, 'Hobby': hobby, 'Idiomas': idiomas
-        })
 
-    df_unified = pd.DataFrame(unified_data).replace('nan', '')
-    
-    mechones = df_unified[df_unified['Role'] == 'Mechón'].reset_index(drop=True)
-    padrinos = df_unified[df_unified['Role'] == 'Padrino'].reset_index(drop=True)
+def build_mapper_from_env() -> dict:
+    """Crea una vez el estado del mapeador."""
+    global _MAPPER_STATE
+    if _MAPPER_STATE is None:
+        _MAPPER_STATE = create_mapper_state(load_app_config())
+    return _MAPPER_STATE
 
-    return mechones, padrinos
 
-df_crudo = read_data("data/*.xlsx") 
-lista_mechones, lista_padrinos = preprocess_data(df_crudo)
+def print_results(resultados) -> None:
+    """Muestra resultados en consola en formato tabla."""
+    print("\n" + "=" * 70)
+    print(f"{'MECHON':<30} | {'PADRINO':<30} | {'RAW':<6} | {'AJUST':<6} | ALERTAS")
+    print("=" * 70)
 
-"""
-Para verificar que el proceso de unificación y limpieza de datos se realizó correctamente, se imprimen la cantidad
-de mechones y padrinos encontrados en el DataFrame unificado.
-"""
+    for _, fila in resultados.iterrows():
+        print(
+            f"{fila['Mechon'][:30]:<30} | {fila['Padrino'][:30]:<30} | "
+            f"{fila['Score_Total']:<6} | {fila['Score_Ajustado']:<6} | {fila['Alertas']}"
+        )
+        print(f"   Detalle: {fila['Justificacion']}")
+        print("-" * 70)
 
-print(f"Mechones encontrados: {len(lista_mechones)}")
-print(f"Padrinos encontrados: {len(lista_padrinos)}")
 
-def parse_preferences(value): 
-    if pd.isna(value) or value == '': 
-            return set()
-    return set([x.strip().lower() for x in str(value).split(';') if x.strip()])
+def run_pipeline() -> None:
+    """Ejecuta el flujo completo del script."""
+    print("Paso 1/4: leyendo data...")
+    datos_crudos = read_data("data/*.xlsx")
 
-def jaccard_similarity(set1, set2):
-    if not set1 and not set2: 
-        return 0
-    intersection = len(set1.intersection(set2))
-    union = len(set1.union(set2))
-    return intersection / union if union > 0 else 0
+    print("Paso 2/4: limpiando y normalizando respuestas...")
+    mapper_state = build_mapper_from_env()
+    reset_mapper_state(mapper_state)
+    mechones, padrinos = preprocess_data(datos_crudos, mapper_state)
 
-def match(mechones, padrinos):
-    cost_matrix = np.zeros((len(mechones), len(padrinos)))
-    
-    categorias = ['Deportes', 'Juegos', 'Series', 'Pref', 'Comida', 'Musica', 'Dieta', 'Trago', 'Hobby', 'Idiomas']
-    
-    for i, mechon in mechones.iterrows():
-        for j, padrino in padrinos.iterrows():
-            score = 0
-            
-            for cat in categorias:
-                score += jaccard_similarity(
-                    parse_preferences(mechon[cat]), 
-                    parse_preferences(padrino[cat])
-                )
-            
-            cost_matrix[i, j] = -score
+    print("Paso 3/4: calculando emparejamientos...")
+    resultados = match_algorithm(mechones, padrinos)
 
-    row_ind, col_ind = linear_sum_assignment(cost_matrix)
-    
-    matches = [
-        {
-            "Mechon": mechones.iloc[i]['Name'],
-            "Padrino": padrinos.iloc[j]['Name']
-        } 
-        for i, j in zip(row_ind, col_ind)
-    ]
-    
-    return matches
+    print("Paso 4/4: guardando resultados...")
+    resultados.to_csv("match.csv", index=False, encoding="utf-8-sig")
 
-print("Generando emparejamientos")
-matches = match(lista_mechones, lista_padrinos)
-df_matches = pd.DataFrame(matches, columns=["Mechon", "Padrino"])
-df_matches.to_csv("matches.csv", index=False, encoding='utf-8-sig')
-print("Emparejamientos generados, visite matches.csv")
+    print_results(resultados)
+
+    print("\nListo. Archivos generados:")
+    print("- match.csv")
+    print("- reporte_ia.csv")
+
+if __name__ == "__main__":
+    run_pipeline()
