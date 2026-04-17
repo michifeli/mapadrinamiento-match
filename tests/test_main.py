@@ -1,4 +1,5 @@
 import unittest
+import pandas as pd
 
 import main
 from src.semantic_mapper import deterministic_map_response
@@ -57,6 +58,46 @@ class TestScoringGuardrails(unittest.TestCase):
         p = self._row(Pref="Carretear en casa", Hobby="Música")
         comp = main.calculate_match_components(m, p)
         self.assertEqual(comp["vital_multiplier"], 1.0)
+
+
+class TestUnmatchedRows(unittest.TestCase):
+    def _build_person(self, name: str) -> dict:
+        return {
+            "Name": name,
+            "Pref": "Carretear en casa",
+            "Hobby": "Música",
+            "Juegos": "Minecraft",
+            "Deportes": "Futbol",
+            "Comida": "Pizza",
+            "Musica": "Rock",
+            "Series": "Drama",
+            "Idiomas": "Inglés",
+            "Dieta": "Omnívora",
+        }
+
+    def test_extra_mapadrino_is_listed_without_mechon(self):
+        mechon = pd.DataFrame([self._build_person("M1")])
+        mapadrinos = pd.DataFrame([self._build_person("P1"), self._build_person("P2")])
+
+        result = main.match_algorithm(mechon, mapadrinos)
+        self.assertEqual(len(result), 2)
+
+        last_row = result.iloc[-1]
+        self.assertEqual(last_row["Mechon"], "")
+        self.assertTrue(last_row["Padrino"] in {"P1", "P2"})
+        self.assertIn("sin_emparejar_por_cupo", last_row["Alertas"])
+
+    def test_extra_mechon_is_listed_without_mapadrino(self):
+        mechon = pd.DataFrame([self._build_person("M1"), self._build_person("M2")])
+        mapadrinos = pd.DataFrame([self._build_person("P1")])
+
+        result = main.match_algorithm(mechon, mapadrinos)
+        self.assertEqual(len(result), 2)
+
+        last_row = result.iloc[-1]
+        self.assertTrue(last_row["Mechon"] in {"M1", "M2"})
+        self.assertEqual(last_row["Padrino"], "")
+        self.assertIn("sin_emparejar_por_cupo", last_row["Alertas"])
 
 
 if __name__ == "__main__":
