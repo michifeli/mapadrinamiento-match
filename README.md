@@ -1,4 +1,4 @@
-# Mapadrinamiento UTFSM TEL
+# Mapadrinamiento TEL 2026
 
 Script para emparejar mechones con mapadrinos maximizando afinidad global.
 
