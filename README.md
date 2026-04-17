@@ -58,90 +58,37 @@ python -m unittest discover -s tests -p 'test_*.py' -v
 
 ## Estructura del proyecto
 
-- [main.py](main.py): orquesta todo el flujo.
-- [src/config.py](src/config.py): lee configuración desde entorno.
-- [src/catalogs.py](src/catalogs.py): opciones oficiales y aliases.
-- [src/text_normalization.py](src/text_normalization.py): limpieza de texto.
-- [src/semantic_mapper.py](src/semantic_mapper.py): mapeo local + IA opcional.
-- [src/data_pipeline.py](src/data_pipeline.py): lectura y normalización del Excel.
-- [src/scoring.py](src/scoring.py): cálculo de puntajes.
-- [src/matching.py](src/matching.py): asignación uno-a-uno (Hungarian).
-- [tests/test_main.py](tests/test_main.py): pruebas básicas.
+```text
+mapadrinamiento/
+├── main.py                      -> Punto de entrada. Ejecuta todo el flujo.
+├── requirements.txt             -> Dependencias del proyecto.
+├── README.md                    -> Guía de uso y explicación general.
+├── .env                         -> Configuración local (opcional, no versionar con claves).
+│
+├── data/
+│   └── *.xlsx                   -> Archivo(s) fuente con respuestas del formulario.
+│
+├── src/
+│   ├── __init__.py              -> Exporta funciones principales del módulo.
+│   ├── config.py                -> Lee variables de entorno.
+│   ├── catalogs.py              -> Catálogos oficiales y aliases.
+│   ├── text_normalization.py    -> Limpieza y tokenización de texto.
+│   ├── semantic_mapper.py       -> Mapeo semántico (local + IA opcional).
+│   ├── data_pipeline.py         -> Lectura del Excel y preprocesamiento.
+│   ├── scoring.py               -> Cálculo de similitudes y score.
+│   └── matching.py              -> Matching global (algoritmo húngaro).
+│
+├── tests/
+│   └── test_main.py             -> Pruebas unitarias base.
+│
+├── match.csv                    -> Salida final de emparejamientos (se genera al correr).
+└── reporte_ia.csv               -> Log de saneamiento/mapeo (se genera al correr).
+```
 
-## Matemática (explicada simple)
+## Matemática
 
 ### Problema
 
 Queremos asignar cada mechón a un mapadrino maximizando el puntaje total de afinidad.
 
-### 1) Similitud por categoría
-
-Para una categoría $c$ y una pareja $(m,p)$:
-
-- $A_c(m)$: respuestas normalizadas de $m$ en la categoría $c$.
-- $A_c(p)$: respuestas normalizadas de $p$ en la categoría $c$.
-
-Se usa Jaccard:
-
-$$
-sim_c(m,p)=\frac{|A_c(m)\cap A_c(p)|}{|A_c(m)\cup A_c(p)|}
-$$
-
-Luego se pondera por importancia de categoría ($w_c$):
-
-$$
-raw(m,p)=\sum_c w_c\cdot sim_c(m,p)
-$$
-
-### 2) Ajustes del score
-
-Se agregan 3 ajustes para que el score sea más realista:
-
-1. **Bonus de cobertura** (si coinciden en más categorías):
-
-$$
-bonus=0.15\cdot N_{match}
-$$
-
-donde $N_{match}$ es la cantidad de categorías con similitud mayor a 0.
-
-2. **Penalización de cola** (evita aceptar pares demasiado débiles):
-
-$$
-gap=\max(0, FLOOR-raw)
-$$
-
-$$
-penalidad=K\cdot\frac{gap^2}{FLOOR}
-$$
-
-En el código: $FLOOR = 8.0$ y $K = 0.55$.
-
-3. **Multiplicador vital** según afinidad en `Pref` y `Hobby`:
-
-- $1.00$ si coinciden ambas,
-- $0.92$ si coincide solo una,
-- $0.80$ si no coincide ninguna.
-
-Score final:
-
-$$
-effective(m,p)=\max\left(0,(raw+bonus-penalidad)\cdot mult\right)
-$$
-
-### 3) Optimización global
-
-No se elige el mejor padrino de cada mechón por separado.
-Se optimiza el conjunto completo:
-
-$$
-\max_{\pi}\sum_i effective(m_i,p_{\pi(i)})
-$$
-
-donde $\pi$ es una asignación uno-a-uno.
-
-Como el algoritmo húngaro resuelve minimización, se usa:
-
-$$
-cost_{ij}=-effective(m_i,p_j)
-$$
+**Me queda de tarea explicar la matematica**
