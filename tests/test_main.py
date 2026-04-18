@@ -87,6 +87,10 @@ class TestUnmatchedRows(unittest.TestCase):
         self.assertTrue(last_row["Padrino"] in {"P1", "P2"})
         self.assertIn("sin_emparejar_por_cupo", last_row["Alertas"])
 
+        matched_row = result[result["Mechon"] == "M1"].iloc[0]
+        self.assertNotEqual(str(matched_row["Sugerencia_Padrino"]), "")
+        self.assertNotEqual(str(matched_row["Sugerencia2_Padrino"]), "")
+
     def test_extra_mechon_is_listed_without_mapadrino(self):
         mechon = pd.DataFrame([self._build_person("M1"), self._build_person("M2")])
         mapadrinos = pd.DataFrame([self._build_person("P1")])
@@ -98,6 +102,62 @@ class TestUnmatchedRows(unittest.TestCase):
         self.assertTrue(last_row["Mechon"] in {"M1", "M2"})
         self.assertEqual(last_row["Padrino"], "")
         self.assertIn("sin_emparejar_por_cupo", last_row["Alertas"])
+
+    def test_low_quality_pair_is_not_forced(self):
+        mechon = pd.DataFrame(
+            [
+                {
+                    "Name": "MaloM",
+                    "Pref": "Salir a carretear",
+                    "Hobby": "Videojuegos",
+                    "Juegos": "Minecraft",
+                    "Deportes": "Futbol",
+                    "Comida": "Pizza",
+                    "Musica": "Rock",
+                    "Series": "Drama",
+                    "Idiomas": "Inglés",
+                    "Dieta": "Omnívora",
+                }
+            ]
+        )
+
+        mapadrinos = pd.DataFrame(
+            [
+                {
+                    "Name": "MaloP",
+                    "Pref": "Quedarte en casa jugando",
+                    "Hobby": "Jardinería",
+                    "Juegos": "OSU!",
+                    "Deportes": "Natación",
+                    "Comida": "Sushi",
+                    "Musica": "Techno",
+                    "Series": "Horror",
+                    "Idiomas": "Ruso",
+                    "Dieta": "Vegana",
+                },
+                {
+                    "Name": "MaloP2",
+                    "Pref": "Quedarte en casa jugando",
+                    "Hobby": "Jardinería",
+                    "Juegos": "OSU!",
+                    "Deportes": "Natación",
+                    "Comida": "Sushi",
+                    "Musica": "Techno",
+                    "Series": "Horror",
+                    "Idiomas": "Ruso",
+                    "Dieta": "Vegana",
+                },
+            ]
+        )
+
+        result = main.match_algorithm(mechon, mapadrinos)
+        self.assertEqual(len(result), 3)
+        mechon_row = result[(result["Mechon"] == "MaloM") & (result["Padrino"] == "")]
+        self.assertTrue(not mechon_row.empty)
+        self.assertTrue(((result["Mechon"] == "") & (result["Padrino"] == "MaloP")).any())
+        self.assertEqual(str(mechon_row.iloc[0]["Sugerencia_Padrino"]), "MaloP")
+        self.assertEqual(str(mechon_row.iloc[0]["Sugerencia2_Padrino"]), "MaloP2")
+        self.assertIn("sugerencia_fuera_minimo", str(mechon_row.iloc[0]["Alertas"]))
 
 
 if __name__ == "__main__":
